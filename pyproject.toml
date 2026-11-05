@@ -12,3 +12,11 @@ testpaths = ["tests"]
 addopts = "--strict-markers"
 xfail_strict = true
 filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501"]

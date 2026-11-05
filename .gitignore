@@ -32,5 +32,6 @@ venv/
 # System files
 .DS_Store
 
-# Tests
+# Tests and linting
 .pytest_cache/
+.ruff_cache/
