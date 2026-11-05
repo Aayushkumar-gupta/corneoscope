@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Environment
+venv/
+.env
+.env.*
+!.env.example
+
+# Secrets
+*.key
+*.pem
+
+# Documents
+*.docx
+*.heic
+*.jpeg
+*.jpg
+*.pdf
+*.png
+*.tif
+*.tiff
+!docs/**
+!tests/fixtures/**
+
+# IDE
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+
+# Tests
+.pytest_cache/
