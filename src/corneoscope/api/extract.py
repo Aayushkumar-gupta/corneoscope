@@ -1,13 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 
+from corneoscope.api.auth import require_api_key
 from corneoscope.core.config import settings
 from corneoscope.core.errors import AppError
 from corneoscope.ingestion.intake import inspect_document
 from corneoscope.schemas.document import ExtractResponse
 
-router = APIRouter(prefix="/api/v1", tags=["extract"])
+router = APIRouter(
+    prefix="/api/v1", tags=["extract"], dependencies=[Depends(require_api_key)]
+)
 
 
 @router.post("/extract")

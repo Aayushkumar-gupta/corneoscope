@@ -17,6 +17,8 @@ implemented yet.
 Requires Python 3.13.
 
 ```bash
+git clone https://github.com/Aayushkumar-gupta/corneoscope.git
+cd corneoscope
 python3.13 -m venv venv
 source venv/bin/activate
 pip install -r requirements-dev.txt
@@ -24,6 +26,23 @@ pip install -e .
 cp .env.example .env
 pre-commit install
 ```
+
+Then set `API_KEY` in `.env` to a random value of at least 32 characters. This
+command prints one:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+## Configuration
+
+Settings are read from `.env`, and environment variables override it.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `API_KEY` | None, required | Key every `/api/v1` request must send; at least 32 characters |
+| `MAX_UPLOAD_MB` | `15` | Largest upload accepted |
+| `APP_NAME` | `Corneoscope` | Name shown in the API docs |
 
 ## Run
 
@@ -33,13 +52,20 @@ uvicorn corneoscope.main:app --reload
 
 API docs are at http://localhost:8000/docs.
 
+## Authentication
+
+Every `/api/v1` route needs the key from `API_KEY` in an `Authorization: Bearer`
+header. `/health` and the API docs stay open. In the docs, click **Authorize** and
+paste the key to try the routes.
+
 ## Upload a document
 
 `POST /api/v1/extract` accepts one PDF, PNG or JPEG file up to 15 MB
 (`MAX_UPLOAD_MB` in `.env`). The type is read from the file's content, not its name.
 
 ```bash
-curl -F "file=@invoice.pdf" http://localhost:8000/api/v1/extract
+curl -H "Authorization: Bearer $API_KEY" -F "file=@invoice.pdf" \
+  http://localhost:8000/api/v1/extract
 ```
 
 ```json
@@ -73,6 +99,7 @@ carries an `X-Request-ID` header with the same ID:
 | HTTP | Code | When |
 | --- | --- | --- |
 | 400 | `invalid_request` | The request failed validation; `details` lists each problem |
+| 401 | `unauthorized` | Missing or wrong API key |
 | 404 | `not_found` | Unknown route |
 | 405 | `method_not_allowed` | Wrong HTTP method for the route |
 | 413 | `file_too_large` | Upload is over `MAX_UPLOAD_MB` |

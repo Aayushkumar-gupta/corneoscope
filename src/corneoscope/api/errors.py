@@ -38,7 +38,9 @@ def error_response(
 
 
 async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
-    return error_response(request, exc.status_code, exc.code, exc.message)
+    return error_response(
+        request, exc.status_code, exc.code, exc.message, headers=exc.headers
+    )
 
 
 async def handle_http_error(request: Request, exc: HTTPException) -> JSONResponse:

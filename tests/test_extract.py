@@ -4,7 +4,9 @@ from fastapi.testclient import TestClient
 from corneoscope.core.config import settings
 from corneoscope.main import app
 
-client = TestClient(app)
+client = TestClient(
+    app, headers={"Authorization": f"Bearer {settings.API_KEY.get_secret_value()}"}
+)
 
 PDF = b"%PDF-1.7\nsynthetic test document"
 
