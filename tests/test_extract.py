@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from samples import make_pdf
+from samples import SCHEMA, make_pdf
 
 from corneoscope.core.config import settings
 from corneoscope.main import app
@@ -12,8 +12,12 @@ client = TestClient(
 PDF = make_pdf(["Invoice 1001\nTotal: 42.50"])
 
 
-def upload(content: bytes, filename: str = "document.pdf"):
-    return client.post("/api/v1/extract", files={"file": (filename, content)})
+def upload(content: bytes, filename: str = "document.pdf", schema: str = SCHEMA):
+    return client.post(
+        "/api/v1/extract",
+        files={"file": (filename, content)},
+        data={"schema": schema},
+    )
 
 
 def test_parses_a_pdf():
@@ -26,6 +30,51 @@ def test_parses_a_pdf():
     assert body["document"]["size_bytes"] == len(PDF)
     assert body["document"]["pages"] == 1
     assert body["warnings"] == []
+
+
+def test_returns_a_result_for_every_requested_field():
+    body = upload(PDF).json()
+
+    assert body["schema_name"] is None
+    assert body["schema_version"] == "1.0"
+    assert list(body["fields"]) == ["invoice_number", "total_amount"]
+    for key, field in body["fields"].items():
+        assert field["key"] == key
+        assert field["value"] is None
+        assert field["status"] == "error"
+        assert field["warnings"][0]["code"] == "extraction_not_available"
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [
+        "not json",
+        "{}",
+        '{"fields": {"name": {"type": "text"}}}',
+    ],
+)
+def test_invalid_schema(schema):
+    response = upload(PDF, schema=schema)
+
+    assert response.status_code == 400
+    error = response.json()["error"]
+    assert error["code"] == "invalid_schema"
+    assert error["details"]
+    assert all(detail["location"][0] == "schema" for detail in error["details"])
+
+
+def test_schema_is_checked_before_the_file():
+    response = upload(b"plain text pretending", schema="not json")
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_schema"
+
+
+def test_missing_schema_is_invalid_request():
+    response = client.post("/api/v1/extract", files={"file": ("doc.pdf", PDF)})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_request"
 
 
 def test_warns_about_pages_without_text():
@@ -98,7 +147,7 @@ def test_accepts_file_exactly_at_the_limit(monkeypatch):
 
 
 def test_missing_file_is_invalid_request():
-    response = client.post("/api/v1/extract")
+    response = client.post("/api/v1/extract", data={"schema": SCHEMA})
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_request"

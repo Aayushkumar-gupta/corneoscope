@@ -2,10 +2,33 @@ import asyncio
 
 from corneoscope.ingestion.intake import inspect_document
 from corneoscope.ingestion.pdf import parse_pdf
-from corneoscope.schemas.document import ExtractResponse, ProcessingWarning
+from corneoscope.schemas.document import ProcessingWarning
+from corneoscope.schemas.extraction import (
+    ExtractionSchema,
+    ExtractResponse,
+    FieldResult,
+)
 
 
-async def process_document(content: bytes, filename: str | None) -> ExtractResponse:
+def extraction_unavailable(schema: ExtractionSchema) -> dict[str, FieldResult]:
+    return {
+        key: FieldResult(
+            key=key,
+            status="error",
+            warnings=[
+                ProcessingWarning(
+                    code="extraction_not_available",
+                    message="Field extraction is not available yet",
+                )
+            ],
+        )
+        for key in schema.fields
+    }
+
+
+async def process_document(
+    content: bytes, filename: str | None, schema: ExtractionSchema
+) -> ExtractResponse:
     document = inspect_document(content, filename)
 
     if document.media_type == "application/pdf":
@@ -33,5 +56,8 @@ async def process_document(content: bytes, filename: str | None) -> ExtractRespo
     return ExtractResponse(
         status="parsed",
         document=document.model_copy(update={"pages": page_count}),
+        schema_name=schema.schema_name,
+        schema_version=schema.schema_version,
+        fields=extraction_unavailable(schema),
         warnings=warnings,
     )

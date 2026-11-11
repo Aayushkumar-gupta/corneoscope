@@ -40,3 +40,9 @@ def make_pdf(pages: list[str]) -> bytes:
         f"startxref\n{xref_start}\n%%EOF\n"
     ).encode()
     return bytes(output)
+
+
+SCHEMA = (
+    '{"fields": {"invoice_number": {"type": "string", "required": true},'
+    ' "total_amount": {"type": "decimal"}}}'
+)

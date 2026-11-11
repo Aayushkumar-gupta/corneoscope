@@ -1,5 +1,3 @@
-from typing import Literal
-
 from pydantic import BaseModel
 
 
@@ -33,9 +31,3 @@ class ProcessingWarning(BaseModel):
     code: str
     message: str
     page: int | None = None
-
-
-class ExtractResponse(BaseModel):
-    status: Literal["parsed"]
-    document: DocumentInfo
-    warnings: list[ProcessingWarning]
