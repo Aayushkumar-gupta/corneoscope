@@ -1,13 +1,14 @@
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from samples import make_pdf
 
 from corneoscope.core.config import Settings, settings
 from corneoscope.main import app
 
 client = TestClient(app)
 
-PDF = b"%PDF-1.7\nsynthetic test document"
+PDF = make_pdf(["Synthetic test document"])
 
 
 def upload(headers: dict[str, str]):

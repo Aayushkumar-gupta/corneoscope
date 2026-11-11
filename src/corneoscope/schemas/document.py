@@ -9,8 +9,33 @@ class DocumentInfo(BaseModel):
     media_type: str
     size_bytes: int
     sha256: str
+    pages: int | None = None
+
+
+class TextBlock(BaseModel):
+    text: str
+    bbox: tuple[float, float, float, float]
+
+
+class PageText(BaseModel):
+    number: int
+    width: float
+    height: float
+    text: str
+    blocks: list[TextBlock]
+
+    @property
+    def has_text(self) -> bool:
+        return bool(self.text.strip())
+
+
+class ProcessingWarning(BaseModel):
+    code: str
+    message: str
+    page: int | None = None
 
 
 class ExtractResponse(BaseModel):
-    status: Literal["validated"]
+    status: Literal["parsed"]
     document: DocumentInfo
+    warnings: list[ProcessingWarning]
