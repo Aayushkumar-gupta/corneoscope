@@ -10,7 +10,9 @@ A document intelligence API for structured extraction, validation and comparison
 with evidence for every extracted value.
 
 **Status:** early development. The upload endpoint checks files, reads PDF text and
-accepts an extraction schema; no fields are extracted yet.
+accepts an extraction schema; no fields are extracted yet. Contracts can be split
+into clauses that cite their pages, with a [dev command](#split-a-contract-into-clauses)
+to try it.
 
 ## Setup
 
@@ -42,7 +44,7 @@ Settings are read from `.env`, and environment variables override it.
 | --- | --- | --- |
 | `API_KEY` | None, required | Key every `/api/v1` request must send; at least 32 characters |
 | `MAX_UPLOAD_MB` | `15` | Largest upload accepted |
-| `MAX_PAGES` | `20` | Most pages a PDF may have |
+| `MAX_PAGES` | `100` | Most pages a PDF may have |
 | `APP_NAME` | `Corneoscope` | Name shown in the API docs |
 
 ## Run
@@ -64,13 +66,19 @@ paste the key to try the routes.
 `POST /api/v1/extract` takes two form parts:
 
 - `file`: one PDF, PNG or JPEG file up to 15 MB (`MAX_UPLOAD_MB`). A PDF can have up
-  to 20 pages (`MAX_PAGES`). The type is read from the file's content, not its name.
+  to 100 pages (`MAX_PAGES`). The type is read from the file's content, not its name.
 - `schema`: a JSON string listing the fields to extract, described in
   [Extraction schema](#extraction-schema).
 
-The text of every PDF page is read. Pages with no text layer, such as scans, and all
-images get a `no_text_layer` warning, because OCR is not available yet. Field
-extraction is not available yet either, so every field comes back with status
+The text of every PDF page is read, and pages a person should check get a warning
+with the page number:
+
+- `no_text_layer`: the page has no text, such as a scan. Images always get it,
+  because OCR is not available yet.
+- `low_text_quality`: more than 10% of the page's characters are unreadable, which
+  happens when a PDF's fonts do not map to real letters.
+
+Field extraction is not available yet, so every field comes back with status
 `error` and an `extraction_not_available` warning.
 
 ```bash
@@ -120,6 +128,37 @@ curl -H "Authorization: Bearer $API_KEY" -F "file=@invoice.pdf" \
   ]
 }
 ```
+
+## Split a contract into clauses
+
+```bash
+python -m corneoscope.clauses contract.pdf
+```
+
+It takes a PDF. Run it from the project folder, since reading a PDF loads the
+settings from `.env`.
+It prints every clause with its number, heading and pages, then lists the pages that
+need a person's review:
+
+```text
+[c1] MASTER SERVICES AGREEMENT (page 1)
+    MASTER SERVICES AGREEMENT This Agreement is made between Acme and Beta.
+[c2] 1.1 Definitions (page 1)
+    1.1 "Services" means the work.
+[c3] 2.1 TERMINATION (pages 1-2)
+    2.1 Either party may end it on 30 days notice.
+review: Page 3 has no text layer; OCR is not available yet
+3 clauses from 3 pages
+```
+
+A clause starts at the beginning of a line with a section number (`12.`, `12.3`),
+`Section 5`, `ARTICLE IV` or a short ALL-CAPS heading. Lettered items such as `(a)`
+stay inside their clause, subsections take their section's heading, and page numbers
+at the top or bottom of a page are left out. A document with no headings is split
+into paragraphs.
+
+Each clause records `start` and `end`, its character positions in the page texts
+joined with a newline, so every clause can be traced back to its exact text.
 
 ## Extraction schema
 

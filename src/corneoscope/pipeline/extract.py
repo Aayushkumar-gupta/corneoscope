@@ -2,6 +2,7 @@ import asyncio
 
 from corneoscope.ingestion.intake import inspect_document
 from corneoscope.ingestion.pdf import parse_pdf
+from corneoscope.ingestion.quality import page_warning
 from corneoscope.schemas.document import ProcessingWarning
 from corneoscope.schemas.extraction import (
     ExtractionSchema,
@@ -35,13 +36,7 @@ async def process_document(
         pages = await asyncio.to_thread(parse_pdf, content)
         page_count = len(pages)
         warnings = [
-            ProcessingWarning(
-                code="no_text_layer",
-                message=f"Page {page.number} has no text layer; OCR is not available yet",
-                page=page.number,
-            )
-            for page in pages
-            if not page.has_text
+            warning for page in pages if (warning := page_warning(page)) is not None
         ]
     else:
         page_count = 1

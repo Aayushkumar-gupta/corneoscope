@@ -4,6 +4,7 @@ from samples import SCHEMA, make_pdf
 
 from corneoscope.core.config import settings
 from corneoscope.main import app
+from corneoscope.schemas.document import PageText
 
 client = TestClient(
     app, headers={"Authorization": f"Bearer {settings.API_KEY.get_secret_value()}"}
@@ -85,6 +86,22 @@ def test_warns_about_pages_without_text():
     assert body["document"]["pages"] == 3
     assert [warning["page"] for warning in body["warnings"]] == [2]
     assert body["warnings"][0]["code"] == "no_text_layer"
+
+
+def test_warns_about_garbled_pages(monkeypatch):
+    def garbled_pages(content):
+        return [
+            PageText(number=1, width=612, height=792, text="Clean text", blocks=[]),
+            PageText(number=2, width=612, height=792, text="\ue001\ue002", blocks=[]),
+        ]
+
+    monkeypatch.setattr("corneoscope.pipeline.extract.parse_pdf", garbled_pages)
+
+    body = upload(PDF).json()
+
+    assert [(w["code"], w["page"]) for w in body["warnings"]] == [
+        ("low_text_quality", 2)
+    ]
 
 
 @pytest.mark.parametrize(
