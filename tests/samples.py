@@ -46,3 +46,30 @@ SCHEMA = (
     '{"fields": {"invoice_number": {"type": "string", "required": true},'
     ' "total_amount": {"type": "decimal"}}}'
 )
+
+
+def make_cuad(contracts: dict[str, list[tuple[str, list[str]]]]) -> dict:
+    """Build CUAD-format data; each contract is a list of (paragraph, labels)."""
+    data = []
+    for title, paragraphs in contracts.items():
+        context = "\n\n".join(text for text, _ in paragraphs)
+        answers: dict[str, list[dict]] = {}
+        offset = 0
+        for text, labels in paragraphs:
+            for label in labels:
+                answers.setdefault(label, []).append(
+                    {"text": text, "answer_start": offset}
+                )
+            offset += len(text) + 2
+        qas = [
+            {
+                "id": f"{title}__{label}",
+                "question": f"Highlight the parts (if any) of this contract related "
+                f'to "{label}" that should be reviewed by a lawyer.',
+                "answers": found,
+                "is_impossible": not found,
+            }
+            for label, found in answers.items()
+        ]
+        data.append({"title": title, "paragraphs": [{"context": context, "qas": qas}]})
+    return {"version": "test", "data": data}

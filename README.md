@@ -160,6 +160,22 @@ into paragraphs.
 Each clause records `start` and `end`, its character positions in the page texts
 joined with a newline, so every clause can be traced back to its exact text.
 
+## Train the clause model
+
+```bash
+python -m corneoscope.classify.train
+```
+
+It trains clause model v1 on [CUAD](https://www.atticusprojectai.org/cuad), 510
+contracts labeled by lawyers, to label paragraphs with 12 clause types such as Governing
+Law, Anti-Assignment and Cap On Liability. The first run downloads CUAD (106 MB) to
+`data/cuad/`. Training takes under a minute and saves the model and its scores to
+`models/`. Neither folder is committed.
+
+On 85 held-out contracts the model scores 0.611 macro F1, 19.1 points above keyword
+rules (0.420). The [model card](docs/model-card.md) has the score for each clause type
+and the [dataset card](docs/dataset-card.md) has how the data is built and split.
+
 ## Extraction schema
 
 ```json
