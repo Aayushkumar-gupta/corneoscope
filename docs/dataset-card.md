@@ -41,6 +41,8 @@ Counts are labeled paragraphs. A paragraph can have several labels, and most hav
 2. A paragraph gets every label whose lawyer-marked span overlaps it. A span over two
    paragraphs labels both.
 3. Whitespace is joined to single spaces.
+4. Each paragraph is also cut into sentences at `.`, `;` and `:`, and each sentence
+   gets only the labels whose spans touch it. The model's sentence half trains on these.
 
 All 13,823 CUAD spans match the contract text at their stated positions.
 

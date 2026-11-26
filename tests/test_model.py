@@ -52,3 +52,30 @@ def test_saved_model_predicts_the_same(tmp_path):
     model.save(path)
 
     assert ClauseModel.load(path).predict(texts) == model.predict(texts)
+
+
+def test_a_label_in_one_sentence_of_a_long_text_is_found():
+    texts, labels = training_data()
+    model = ClauseModel().fit(texts, labels)
+    filler = " ".join(f"Notices go out in case {n}." for n in range(30))
+
+    assert model.predict([f"{filler} We agree on topic5 here. {filler}"]) == [
+        frozenset({LABELS[5]})
+    ]
+
+
+def test_sentence_labels_are_used_when_given():
+    texts, labels = training_data()
+    sentences = list(zip(texts, labels, strict=True)) + [
+        (f"the zebra clause {n}", frozenset({LABELS[0]})) for n in range(4)
+    ]
+
+    model = ClauseModel().fit(texts, labels, sentences)
+
+    assert model.sentence.predict_proba(["the zebra clause"])[0, 0] > 0.5
+
+
+def test_no_texts_give_no_scores():
+    texts, labels = training_data()
+
+    assert ClauseModel().fit(texts, labels).probabilities([]).shape == (0, len(LABELS))

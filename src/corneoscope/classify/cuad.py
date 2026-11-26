@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from corneoscope.classify.labels import LABELS
+from corneoscope.classify.sentences import sentence_bounds
 from corneoscope.clauses.splitter import PARAGRAPH_BREAK
 
 URL = "https://zenodo.org/records/4595826/files/CUAD_v1.zip"
@@ -31,6 +32,15 @@ class Example:
     contract: str
     text: str
     labels: frozenset[str]
+    # Each sentence carries only the labels whose spans touch it, which is finer
+    # than the paragraph's labels.
+    sentences: tuple[tuple[str, frozenset[str]], ...] = ()
+
+
+def labels_between(
+    spans: list[tuple[int, int, str]], begin: int, end: int
+) -> frozenset:
+    return frozenset(label for low, high, label in spans if low < end and high > begin)
 
 
 def sha256(path: Path) -> str:
@@ -99,12 +109,19 @@ def contract_examples(title: str, context: str, qas: list[dict]) -> list[Example
     edges.append(len(context))
     examples = []
     for begin, end in zip(edges[::2], edges[1::2], strict=True):
-        text = " ".join(context[begin:end].split())
+        raw = context[begin:end]
+        text = " ".join(raw.split())
         if text:
-            labels = frozenset(
-                label for low, high, label in spans if low < end and high > begin
+            sentences = tuple(
+                (
+                    " ".join(raw[low:high].split()),
+                    labels_between(spans, begin + low, begin + high),
+                )
+                for low, high in sentence_bounds(raw)
             )
-            examples.append(Example(title, text, labels))
+            examples.append(
+                Example(title, text, labels_between(spans, begin, end), sentences)
+            )
     return examples
 
 

@@ -178,7 +178,7 @@ def test_a_missing_model_is_reported(tmp_path, monkeypatch):
 
 
 def test_the_model_is_loaded_once_from_its_file(model, tmp_path, monkeypatch):
-    path = tmp_path / "clause-model-v1.joblib"
+    path = tmp_path / "clause-model-v2.joblib"
     model.save(path)
     monkeypatch.setattr(settings, "MODEL_PATH", path)
 

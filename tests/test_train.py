@@ -17,8 +17,8 @@ def test_trains_scores_and_saves_the_model(tmp_path, capsys):
 
     assert main(["--data", str(tmp_path), "--out", str(out)]) == 0
 
-    report = json.loads((out / "clause-model-v1.json").read_text())
-    assert (out / "clause-model-v1.joblib").exists()
+    report = json.loads((out / "clause-model-v2.json").read_text())
+    assert (out / "clause-model-v2.joblib").exists()
     assert sum(part["contracts"] for part in report["split"].values()) == 30
     assert report["test"]["model_macro_f1"] == 1.0
     assert set(report["thresholds"]) == set(LABELS)

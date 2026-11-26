@@ -1,4 +1,4 @@
-"""Train clause model v1 on CUAD and score it against the keyword baseline.
+"""Train clause model v2 on CUAD and score it against the keyword baseline.
 
 python -m corneoscope.classify.train
 """
@@ -19,8 +19,10 @@ from corneoscope.classify.metrics import LabelScore, macro_f1, score
 from corneoscope.classify.model import ClauseModel
 
 MODELS_DIR = Path("models")
-MODEL_NAME = "clause-model-v1"
-C_VALUES = (1.0, 4.0, 16.0)
+MODEL_NAME = "clause-model-v2"
+# Chosen on validation: whole-text C from 8 and 32, sentence C from 1, 4 and 16.
+WHOLE_C = 32.0
+SENTENCE_C = 4.0
 ERROR_SAMPLES = 5
 SAMPLE_CHARS = 300
 
@@ -31,6 +33,10 @@ def texts(examples: list[Example]) -> list[str]:
 
 def truth(examples: list[Example]) -> list[frozenset[str]]:
     return [example.labels for example in examples]
+
+
+def sentences(examples: list[Example]) -> list[tuple[str, frozenset[str]]]:
+    return [sentence for example in examples for sentence in example.sentences]
 
 
 def summary(parts: dict[str, list[Example]]) -> dict:
@@ -88,6 +94,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--data", type=Path, default=DATA_DIR, help="CUAD folder")
     parser.add_argument("--out", type=Path, default=MODELS_DIR, help="output folder")
+    parser.add_argument("--c", type=float, default=WHOLE_C, help="whole-text C")
+    parser.add_argument(
+        "--sentence-c", type=float, default=SENTENCE_C, help="sentence C"
+    )
     args = parser.parse_args(argv)
 
     started = time.perf_counter()
@@ -96,15 +106,11 @@ def main(argv: list[str] | None = None) -> int:
     for name, info in summary(parts).items():
         print(f"{name}: {info['contracts']} contracts, {info['paragraphs']} paragraphs")
 
-    best: tuple[float, ClauseModel] | None = None
-    for c in C_VALUES:
-        model = ClauseModel(c).fit(texts(train), truth(train))
-        model.tune_thresholds(texts(validation), truth(validation))
-        result = macro_f1(score(truth(validation), model.predict(texts(validation))))
-        print(f"C={c:g}: validation macro F1 {result:.3f}")
-        if best is None or result > best[0]:
-            best = (result, model)
-    validation_f1, model = best
+    model = ClauseModel(args.c, args.sentence_c)
+    model.fit(texts(train), truth(train), sentences(train))
+    model.tune_thresholds(texts(validation), truth(validation))
+    validation_f1 = macro_f1(score(truth(validation), model.predict(texts(validation))))
+    print(f"validation macro F1 {validation_f1:.3f}")
 
     # The test split is scored once, after every choice was made on validation.
     predicted = model.predict(texts(test))
@@ -119,6 +125,7 @@ def main(argv: list[str] | None = None) -> int:
         "trained": date.today().isoformat(),
         "scikit_learn": sklearn.__version__,
         "c": model.c,
+        "sentence_c": model.sentence_c,
         "thresholds": dict(zip(LABELS, model.thresholds.tolist(), strict=True)),
         "split": summary(parts),
         "validation_macro_f1": validation_f1,

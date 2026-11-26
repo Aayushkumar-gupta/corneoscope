@@ -53,6 +53,26 @@ def test_a_span_over_two_paragraphs_labels_both():
     assert [set(e.labels) for e in examples] == [{"Insurance"}, {"Insurance"}]
 
 
+def test_each_sentence_gets_only_the_labels_that_touch_it():
+    context = "Fees are due monthly.\nBeta may audit the records."
+    qas = [
+        {
+            "question": 'Highlight the parts related to "Audit Rights" that should be',
+            "answers": [
+                {"text": "Beta may audit", "answer_start": context.index("Beta")}
+            ],
+        }
+    ]
+
+    [example] = contract_examples("Acme", context, qas)
+
+    assert example.labels == {"Audit Rights"}
+    assert example.sentences == (
+        ("Fees are due monthly.", frozenset()),
+        ("Beta may audit the records.", frozenset({"Audit Rights"})),
+    )
+
+
 @pytest.mark.parametrize(
     ("title", "side"),
     [

@@ -45,7 +45,7 @@ Settings are read from `.env`, and environment variables override it.
 | `API_KEY` | None, required | Key every `/api/v1` request must send; at least 32 characters |
 | `MAX_UPLOAD_MB` | `15` | Largest upload accepted |
 | `MAX_PAGES` | `100` | Most pages a PDF may have |
-| `MODEL_PATH` | `models/clause-model-v1.joblib` | Clause model used by `/api/v1/analyze` |
+| `MODEL_PATH` | `models/clause-model-v2.joblib` | Clause model used by `/api/v1/analyze` |
 | `APP_NAME` | `Corneoscope` | Name shown in the API docs |
 
 ## Run
@@ -177,15 +177,17 @@ joined with a newline, so every clause can be traced back to its exact text.
 python -m corneoscope.classify.train
 ```
 
-It trains clause model v1 on [CUAD](https://www.atticusprojectai.org/cuad), 510
+It trains clause model v2 on [CUAD](https://www.atticusprojectai.org/cuad), 510
 contracts labeled by lawyers, to label paragraphs with 12 clause types such as Governing
 Law, Anti-Assignment and Cap On Liability. The first run downloads CUAD (106 MB) to
-`data/cuad/`. Training takes under a minute and saves the model and its scores to
+`data/cuad/`. Training takes about 3 minutes and saves the model and its scores to
 `models/`. Neither folder is committed.
 
-On 85 held-out contracts the model scores 0.611 macro F1, 19.1 points above keyword
-rules (0.420). The [model card](docs/model-card.md) has the score for each clause type
-and the [dataset card](docs/dataset-card.md) has how the data is built and split.
+The model has two halves: one scores the whole text, one scores each sentence, and a
+label's score is the mean of the whole-text score and the best sentence's. On 85
+held-out contracts it scores 0.651 macro F1, 23.1 points above keyword rules (0.420).
+The [model card](docs/model-card.md) has the score for each clause type and the
+[dataset card](docs/dataset-card.md) has how the data is built and split.
 
 ## Analyze a contract
 
@@ -210,7 +212,7 @@ curl -H "Authorization: Bearer $API_KEY" -F "file=@contract.pdf" \
     "sha256": "9f88c2185c65c521e1b93820cb1e3b009f2b07a478be1101fd720a4615aa4334",
     "pages": 2
   },
-  "model": "clause-model-v1",
+  "model": "clause-model-v2",
   "clauses": [
     {
       "id": "c1",
@@ -221,7 +223,7 @@ curl -H "Authorization: Bearer $API_KEY" -F "file=@contract.pdf" \
       "end": 68,
       "page_start": 1,
       "page_end": 1,
-      "labels": [{"label": "Governing Law", "score": 0.9999903840658689, "threshold": 0.85}],
+      "labels": [{"label": "Governing Law", "score": 0.9999903840658689, "threshold": 0.8}],
       "review_required": false,
       "evidence": [
         {
