@@ -25,6 +25,10 @@ venv/
 !docs/**
 !tests/fixtures/**
 
+# Datasets and trained models
+data/
+models/
+
 # IDE
 .vscode/
 .idea/

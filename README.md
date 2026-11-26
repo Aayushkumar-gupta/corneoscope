@@ -10,7 +10,9 @@ A document intelligence API for structured extraction, validation and comparison
 with evidence for every extracted value.
 
 **Status:** early development. The upload endpoint checks files, reads PDF text and
-accepts an extraction schema; no fields are extracted yet.
+accepts an extraction schema; no fields are extracted yet. The analyze endpoint splits
+a contract into clauses that cite their pages and labels each clause with a model
+trained here on [CUAD](#train-the-clause-model).
 
 ## Setup
 
@@ -42,7 +44,8 @@ Settings are read from `.env`, and environment variables override it.
 | --- | --- | --- |
 | `API_KEY` | None, required | Key every `/api/v1` request must send; at least 32 characters |
 | `MAX_UPLOAD_MB` | `15` | Largest upload accepted |
-| `MAX_PAGES` | `20` | Most pages a PDF may have |
+| `MAX_PAGES` | `100` | Most pages a PDF may have |
+| `MODEL_PATH` | `models/clause-model-v2.joblib` | Clause model used by `/api/v1/analyze` |
 | `APP_NAME` | `Corneoscope` | Name shown in the API docs |
 
 ## Run
@@ -64,13 +67,19 @@ paste the key to try the routes.
 `POST /api/v1/extract` takes two form parts:
 
 - `file`: one PDF, PNG or JPEG file up to 15 MB (`MAX_UPLOAD_MB`). A PDF can have up
-  to 20 pages (`MAX_PAGES`). The type is read from the file's content, not its name.
+  to 100 pages (`MAX_PAGES`). The type is read from the file's content, not its name.
 - `schema`: a JSON string listing the fields to extract, described in
   [Extraction schema](#extraction-schema).
 
-The text of every PDF page is read. Pages with no text layer, such as scans, and all
-images get a `no_text_layer` warning, because OCR is not available yet. Field
-extraction is not available yet either, so every field comes back with status
+The text of every PDF page is read, and pages a person should check get a warning
+with the page number:
+
+- `no_text_layer`: the page has no text, such as a scan. Images always get it,
+  because OCR is not available yet.
+- `low_text_quality`: more than 10% of the page's characters are unreadable, which
+  happens when a PDF's fonts do not map to real letters.
+
+Field extraction is not available yet, so every field comes back with status
 `error` and an `extraction_not_available` warning.
 
 ```bash
@@ -120,6 +129,137 @@ curl -H "Authorization: Bearer $API_KEY" -F "file=@invoice.pdf" \
   ]
 }
 ```
+
+## Split a contract into clauses
+
+```bash
+python -m corneoscope.clauses contract.pdf
+```
+
+It takes a PDF. Run it from the project folder, since reading a PDF loads the
+settings from `.env`.
+It prints every clause with its number, heading and pages, then lists the pages that
+need a person's review:
+
+```text
+[c1] MASTER SERVICES AGREEMENT (page 1)
+    MASTER SERVICES AGREEMENT This Agreement is made between Acme and Beta.
+[c2] 1.1 Definitions (page 1)
+    1.1 "Services" means the work.
+[c3] 2.1 TERMINATION (pages 1-2)
+    2.1 Either party may end it on 30 days notice.
+review: Page 3 has no text layer; OCR is not available yet
+3 clauses from 3 pages
+```
+
+A clause starts at the beginning of a line with a section number (`12.`, `12.3`),
+`Section 5`, `ARTICLE IV`, a short ALL-CAPS heading or a signature marker such as
+`[Signature page follows]` or `IN WITNESS WHEREOF`. Lettered items such as `(a)` stay
+inside their clause, and subsections take their section's heading. A heading can be
+in capitals, Title Case or sentence case (`5.2 Grant-back license to Polestar
+Technology`). A document with no headings is split into paragraphs.
+
+- **Table of contents:** three or more numbered headings in a row that end in a page
+  number (`8. TERM AND TERMINATION 5`) become one clause that ends with its page, so
+  they are not taken for the real sections.
+- **Several documents in one PDF:** numbering starts again after a signature marker or
+  a heading such as `EXHIBIT A`, `SIDE LETTER` or `AMENDMENT AGREEMENT`.
+- **Page furniture:** page numbers (`3`, `Page 3 of 10`, `2(5)`) and running headers or
+  footers (a line at the top or bottom of at least 3 pages) are left out of the
+  clause text.
+
+Each clause records `start` and `end`, its character positions in the page texts
+joined with a newline, so every clause can be traced back to its exact text.
+
+## Train the clause model
+
+```bash
+python -m corneoscope.classify.train
+```
+
+It trains clause model v2 on [CUAD](https://www.atticusprojectai.org/cuad), 510
+contracts labeled by lawyers, to label paragraphs with 12 clause types such as Governing
+Law, Anti-Assignment and Cap On Liability. The first run downloads CUAD (106 MB) to
+`data/cuad/`. Training takes about 3 minutes and saves the model and its scores to
+`models/`. Neither folder is committed.
+
+The model has two halves: one scores the whole text, one scores each sentence, and a
+label's score is the mean of the whole-text score and the best sentence's. On 85
+held-out contracts it scores 0.651 macro F1, 23.1 points above keyword rules (0.420).
+The [model card](docs/model-card.md) has the score for each clause type and the
+[dataset card](docs/dataset-card.md) has how the data is built and split.
+
+## Analyze a contract
+
+`POST /api/v1/analyze` takes one form part, `file`: a PDF with the same size and page
+limits as uploads. It splits the PDF into clauses and labels each one with the clause
+model, so [train the model](#train-the-clause-model) first; until then the endpoint
+returns `503 model_not_available`.
+
+```bash
+curl -H "Authorization: Bearer $API_KEY" -F "file=@contract.pdf" \
+  http://localhost:8000/api/v1/analyze
+```
+
+```json
+{
+  "status": "analyzed",
+  "document": {
+    "id": "doc_83070fedebbc485880476a1437e8784b",
+    "filename": "contract.pdf",
+    "media_type": "application/pdf",
+    "size_bytes": 1077,
+    "sha256": "9f88c2185c65c521e1b93820cb1e3b009f2b07a478be1101fd720a4615aa4334",
+    "pages": 2
+  },
+  "model": "clause-model-v2",
+  "clauses": [
+    {
+      "id": "c1",
+      "number": "1",
+      "heading": "GOVERNING LAW",
+      "text": "1. GOVERNING LAW This Agreement is governed by the laws of New York.",
+      "start": 0,
+      "end": 68,
+      "page_start": 1,
+      "page_end": 1,
+      "labels": [{"label": "Governing Law", "score": 0.9999903840658689, "threshold": 0.8}],
+      "review_required": false,
+      "evidence": [
+        {
+          "document_id": "doc_83070fedebbc485880476a1437e8784b",
+          "page": 1,
+          "text": "1. GOVERNING LAW\nThis Agreement is governed by the laws of New York.",
+          "bbox": null,
+          "method": "text_layer"
+        }
+      ],
+      "warnings": []
+    }
+  ],
+  "warnings": []
+}
+```
+
+Each clause has:
+
+| Key | Meaning |
+| --- | --- |
+| `labels` | Clause types whose score reached their threshold, highest score first |
+| `score` | The model's output from 0 to 1; it ranks clauses but is not a calibrated probability |
+| `threshold` | The score a label needs, tuned per label on validation contracts |
+| `evidence` | The clause's exact text on each page it covers |
+| `review_required` | `true` when one of the warnings below applies |
+
+| Clause warning | When |
+| --- | --- |
+| `low_confidence` | A label's score is within 0.10 of its threshold, on either side |
+| `long_clause` | Over 4,000 characters (99.7% of training paragraphs are shorter) |
+| `page_needs_review` | On a page with a `no_text_layer` or `low_text_quality` warning |
+
+The 0.10 margin is a fixed rule, not tuned on data. Images are rejected with
+`unsupported_media_type`, because they need OCR. A 100-page contract is analyzed in
+0.15 s on an M2 Mac with 8 GB, plus 0.25 s to load the model on the first request.
 
 ## Extraction schema
 
@@ -186,9 +326,10 @@ carries an `X-Request-ID` header with the same ID:
 | 405 | `method_not_allowed` | Wrong HTTP method for the route |
 | 413 | `file_too_large` | Upload is over `MAX_UPLOAD_MB` |
 | 413 | `too_many_pages` | PDF has more pages than `MAX_PAGES` |
-| 415 | `unsupported_media_type` | File content is not a PDF, PNG or JPEG |
+| 415 | `unsupported_media_type` | Not a PDF, PNG or JPEG; `/analyze` takes PDFs only |
 | 422 | `unreadable_document` | PDF is damaged or password protected |
 | 500 | `internal_error` | Unexpected server error; details are logged, never returned |
+| 503 | `model_not_available` | `/analyze` was called before the clause model was trained |
 
 Quote the `request_id` when reporting a problem; the server log records the same ID.
 
