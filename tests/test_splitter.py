@@ -44,6 +44,15 @@ def test_start_and_end_point_at_the_exact_text():
         ("3. Termination for Convenience.", "Termination for Convenience"),
         ("3. Termination. Either party may end it.", "Termination"),
         ("3. The Supplier shall deliver the goods.", None),
+        (
+            "3. Grant-back license to Common Technology",
+            "Grant-back license to Common Technology",
+        ),
+        (
+            "3. Warranties in relation to the Patents",
+            "Warranties in relation to the Patents",
+        ),
+        ("3. Each party may assign its rights", None),
     ],
 )
 def test_reads_the_heading(line, heading):
@@ -172,7 +181,9 @@ def test_page_positions_match_the_document_text():
         assert " ".join(text[clause.start : clause.end].split()) == clause.text
 
 
-@pytest.mark.parametrize("footer", ["3", "Page 3", "Page 3 of 10", "3/10", "- 3 -"])
+@pytest.mark.parametrize(
+    "footer", ["3", "Page 3", "Page 3 of 10", "3/10", "- 3 -", "3(10)", "(10)"]
+)
 def test_page_numbers_are_left_out(footer):
     pages = [
         page(1, f"1. Term. Two years and\n{footer}"),
@@ -213,3 +224,130 @@ def test_article_reference_does_not_start_a_clause():
     clauses = split_text("1. Fees. As set out in\nArticle 5 of the Schedule.\n")
 
     assert numbers(clauses) == ["1"]
+
+
+def test_a_sentence_case_line_that_runs_on_is_not_a_heading():
+    clauses = split_text("1. Fees. Pay.\n2. Payment of the fees\nis due each month.\n")
+
+    assert clauses[1].heading is None
+    assert clauses[1].text == "2. Payment of the fees is due each month."
+
+
+@pytest.mark.parametrize(
+    "contents",
+    [
+        "TABLE OF CONTENTS\n1. DEFINITIONS 1\n2. TERM 2\n3. FEES 3\n",
+        "Contents\n1. Definitions .......... 1\n2. Term .......... 2\n3. Fees ..... 3\n",
+    ],
+)
+def test_table_of_contents_is_not_taken_for_sections(contents):
+    clauses = split_text(
+        contents + "1. DEFINITIONS\n1.1 Words mean things.\n"
+        "2. TERM\n2.1 Two years.\n3. FEES\n3.1 Pay on time.\n"
+    )
+
+    assert numbers(clauses) == [None, "1.1", "2.1", "3.1"]
+    assert clauses[0].heading == contents.split("\n")[0]
+    assert [clause.heading for clause in clauses[1:]] == ["DEFINITIONS", "TERM", "FEES"]
+
+
+def test_a_heading_that_ends_in_a_number_is_still_a_section():
+    clauses = split_text("1. PHASE 2\nThe second phase.\n2. Fees. Pay.\n")
+
+    assert numbers(clauses) == ["1", "2"]
+
+
+def test_table_of_contents_ends_with_its_page():
+    pages = [
+        page(1, "CONTENTS\n1. TERM 2\n2. FEES 2\n3. LAW 2"),
+        page(2, "This Agreement is made today.\n1. TERM\nTwo years.\n2. FEES\nPay."),
+    ]
+
+    clauses = split_pages(pages)
+
+    assert [(c.number, c.heading) for c in clauses[:2]] == [
+        (None, "CONTENTS"),
+        (None, None),
+    ]
+    assert clauses[1].text == "This Agreement is made today."
+    assert (clauses[0].page_end, clauses[1].page_start) == (1, 2)
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "[Signature page follows]",
+        "[SIGNATURE PAGE FOLLOWS]",
+        "(Signature pages to follow)",
+        "[Remainder of page intentionally left blank]",
+        "IN WITNESS WHEREOF, the parties have signed this Agreement.",
+    ],
+)
+def test_signature_marker_ends_the_last_clause(marker):
+    clauses = split_text(
+        f"1. Term. Two years.\n2. Law. England.\n{marker}\nAcme Inc.\n"
+    )
+
+    assert numbers(clauses) == ["1", "2", None]
+    assert clauses[1].text == "2. Law. England."
+    assert clauses[2].text.startswith(marker)
+
+
+def test_numbering_restarts_after_the_signatures():
+    clauses = split_text(
+        "1. Term. Two years.\n3. Law. England.\n[Signature page follows]\nAcme Inc.\n"
+        "1. Scope. This amendment changes clause 5.\n2. Effect. It starts today.\n"
+    )
+
+    assert numbers(clauses) == ["1", "3", None, "1", "2"]
+
+
+@pytest.mark.parametrize("title", ["SIDE LETTER", "AMENDMENT AGREEMENT", "ADDENDUM"])
+def test_a_new_document_restarts_the_numbering(title):
+    clauses = split_text(
+        f"1. Term. Two years.\n3. Law. England.\n{title}\nThe parties agree.\n"
+        "1. Scope. It changes clause 5.\n"
+    )
+
+    assert numbers(clauses) == ["1", "3", None, "1"]
+
+
+def test_an_excerpt_can_start_at_a_high_number():
+    clauses = split_text("12. GOVERNING LAW\nNew York law.\n13. NOTICES\nBy post.\n")
+
+    assert numbers(clauses) == ["12", "13"]
+    assert [clause.heading for clause in clauses] == ["GOVERNING LAW", "NOTICES"]
+
+
+def test_a_high_number_without_a_heading_does_not_start_a_clause():
+    clauses = split_text("The term is\n12. the parties agree to it.\n")
+
+    assert numbers(clauses) == [None]
+
+
+def test_running_headers_are_left_out():
+    pages = [
+        page(n, f"Acme Supply Agreement {n}(3)\n{body}")
+        for n, body in enumerate(
+            ["1. Term. Two years and", "two months.\n2. Fees. Pay", "on time."], start=1
+        )
+    ]
+
+    clauses = split_pages(pages)
+
+    assert [clause.text for clause in clauses] == [
+        "1. Term. Two years and two months.",
+        "2. Fees. Pay on time.",
+    ]
+    assert (clauses[0].page_start, clauses[0].page_end) == (1, 2)
+
+
+def test_a_line_on_only_two_pages_is_not_a_header():
+    pages = [
+        page(1, "Draft for review\n1. Term. Two years."),
+        page(2, "Draft for review\n2. Fees. Pay."),
+    ]
+
+    clauses = split_pages(pages)
+
+    assert clauses[0].text == "Draft for review"

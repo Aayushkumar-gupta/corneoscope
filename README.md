@@ -153,10 +153,20 @@ review: Page 3 has no text layer; OCR is not available yet
 ```
 
 A clause starts at the beginning of a line with a section number (`12.`, `12.3`),
-`Section 5`, `ARTICLE IV` or a short ALL-CAPS heading. Lettered items such as `(a)`
-stay inside their clause, subsections take their section's heading, and page numbers
-at the top or bottom of a page are left out. A document with no headings is split
-into paragraphs.
+`Section 5`, `ARTICLE IV`, a short ALL-CAPS heading or a signature marker such as
+`[Signature page follows]` or `IN WITNESS WHEREOF`. Lettered items such as `(a)` stay
+inside their clause, and subsections take their section's heading. A heading can be
+in capitals, Title Case or sentence case (`5.2 Grant-back license to Polestar
+Technology`). A document with no headings is split into paragraphs.
+
+- **Table of contents:** three or more numbered headings in a row that end in a page
+  number (`8. TERM AND TERMINATION 5`) become one clause that ends with its page, so
+  they are not taken for the real sections.
+- **Several documents in one PDF:** numbering starts again after a signature marker or
+  a heading such as `EXHIBIT A`, `SIDE LETTER` or `AMENDMENT AGREEMENT`.
+- **Page furniture:** page numbers (`3`, `Page 3 of 10`, `2(5)`) and running headers or
+  footers (a line at the top or bottom of at least 3 pages) are left out of the
+  clause text.
 
 Each clause records `start` and `end`, its character positions in the page texts
 joined with a newline, so every clause can be traced back to its exact text.

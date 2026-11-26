@@ -50,7 +50,7 @@ Each contract has two files:
 | `headings` | Every found clause has the listed heading |
 | `pages` | Every found clause has the listed first and last page |
 | `not_in_clause_text` | None of the listed strings appear in any clause |
-| well-formed | Always runs. Every clause's `start`/`end` points at its exact text, ids are `c1, c2, …`, and pages are in range. |
+| well-formed | Always runs: `start`/`end` match the text, ids are `c1, c2, …`, pages in range |
 
 `headings` and `pages` only look at clauses that `numbers` found, so after a fix that
 finds more clauses, they can start failing for clauses they couldn't see before.

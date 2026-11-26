@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from corneoscope.clauses.splitter import document_text, split_pages
+from corneoscope.clauses.splitter import clean_document_text, document_text, split_pages
 from corneoscope.ingestion.pdf import parse_pdf
 
 CONTRACTS = Path(__file__).parent / "fixtures" / "contracts"
@@ -116,11 +116,15 @@ def test_clauses_are_well_formed(name):
     """Rules every contract must follow, whatever its layout."""
     expected, pages, clauses = load(name)
     text, _ = document_text(pages)
+    cleaned = clean_document_text(pages)
 
     assert len(pages) == expected["pages"]
+    assert len(cleaned) == len(text)
     assert [clause.id for clause in clauses] == [
         f"c{n}" for n in range(1, len(clauses) + 1)
     ]
     for clause in clauses:
-        assert " ".join(text[clause.start : clause.end].split()) == clause.text
+        assert " ".join(cleaned[clause.start : clause.end].split()) == clause.text
+        assert text[clause.start] == cleaned[clause.start]
+        assert text[clause.end - 1] == cleaned[clause.end - 1]
         assert 1 <= clause.page_start <= clause.page_end <= len(pages)
