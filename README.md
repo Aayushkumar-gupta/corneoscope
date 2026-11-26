@@ -10,9 +10,9 @@ A document intelligence API for structured extraction, validation and comparison
 with evidence for every extracted value.
 
 **Status:** early development. The upload endpoint checks files, reads PDF text and
-accepts an extraction schema; no fields are extracted yet. Contracts can be split
-into clauses that cite their pages, with a [dev command](#split-a-contract-into-clauses)
-to try it.
+accepts an extraction schema; no fields are extracted yet. The analyze endpoint splits
+a contract into clauses that cite their pages and labels each clause with a model
+trained here on [CUAD](#train-the-clause-model).
 
 ## Setup
 
@@ -45,6 +45,7 @@ Settings are read from `.env`, and environment variables override it.
 | `API_KEY` | None, required | Key every `/api/v1` request must send; at least 32 characters |
 | `MAX_UPLOAD_MB` | `15` | Largest upload accepted |
 | `MAX_PAGES` | `100` | Most pages a PDF may have |
+| `MODEL_PATH` | `models/clause-model-v1.joblib` | Clause model used by `/api/v1/analyze` |
 | `APP_NAME` | `Corneoscope` | Name shown in the API docs |
 
 ## Run
@@ -176,6 +177,78 @@ On 85 held-out contracts the model scores 0.611 macro F1, 19.1 points above keyw
 rules (0.420). The [model card](docs/model-card.md) has the score for each clause type
 and the [dataset card](docs/dataset-card.md) has how the data is built and split.
 
+## Analyze a contract
+
+`POST /api/v1/analyze` takes one form part, `file`: a PDF with the same size and page
+limits as uploads. It splits the PDF into clauses and labels each one with the clause
+model, so [train the model](#train-the-clause-model) first; until then the endpoint
+returns `503 model_not_available`.
+
+```bash
+curl -H "Authorization: Bearer $API_KEY" -F "file=@contract.pdf" \
+  http://localhost:8000/api/v1/analyze
+```
+
+```json
+{
+  "status": "analyzed",
+  "document": {
+    "id": "doc_83070fedebbc485880476a1437e8784b",
+    "filename": "contract.pdf",
+    "media_type": "application/pdf",
+    "size_bytes": 1077,
+    "sha256": "9f88c2185c65c521e1b93820cb1e3b009f2b07a478be1101fd720a4615aa4334",
+    "pages": 2
+  },
+  "model": "clause-model-v1",
+  "clauses": [
+    {
+      "id": "c1",
+      "number": "1",
+      "heading": "GOVERNING LAW",
+      "text": "1. GOVERNING LAW This Agreement is governed by the laws of New York.",
+      "start": 0,
+      "end": 68,
+      "page_start": 1,
+      "page_end": 1,
+      "labels": [{"label": "Governing Law", "score": 0.9999903840658689, "threshold": 0.85}],
+      "review_required": false,
+      "evidence": [
+        {
+          "document_id": "doc_83070fedebbc485880476a1437e8784b",
+          "page": 1,
+          "text": "1. GOVERNING LAW\nThis Agreement is governed by the laws of New York.",
+          "bbox": null,
+          "method": "text_layer"
+        }
+      ],
+      "warnings": []
+    }
+  ],
+  "warnings": []
+}
+```
+
+Each clause has:
+
+| Key | Meaning |
+| --- | --- |
+| `labels` | Clause types whose score reached their threshold, highest score first |
+| `score` | The model's output from 0 to 1; it ranks clauses but is not a calibrated probability |
+| `threshold` | The score a label needs, tuned per label on validation contracts |
+| `evidence` | The clause's exact text on each page it covers |
+| `review_required` | `true` when one of the warnings below applies |
+
+| Clause warning | When |
+| --- | --- |
+| `low_confidence` | A label's score is within 0.10 of its threshold, on either side |
+| `long_clause` | Over 4,000 characters (99.7% of training paragraphs are shorter) |
+| `page_needs_review` | On a page with a `no_text_layer` or `low_text_quality` warning |
+
+The 0.10 margin is a fixed rule, not tuned on data. Images are rejected with
+`unsupported_media_type`, because they need OCR. A 100-page contract is analyzed in
+0.15 s on an M2 Mac with 8 GB, plus 0.25 s to load the model on the first request.
+
 ## Extraction schema
 
 ```json
@@ -241,9 +314,10 @@ carries an `X-Request-ID` header with the same ID:
 | 405 | `method_not_allowed` | Wrong HTTP method for the route |
 | 413 | `file_too_large` | Upload is over `MAX_UPLOAD_MB` |
 | 413 | `too_many_pages` | PDF has more pages than `MAX_PAGES` |
-| 415 | `unsupported_media_type` | File content is not a PDF, PNG or JPEG |
+| 415 | `unsupported_media_type` | Not a PDF, PNG or JPEG; `/analyze` takes PDFs only |
 | 422 | `unreadable_document` | PDF is damaged or password protected |
 | 500 | `internal_error` | Unexpected server error; details are logged, never returned |
+| 503 | `model_not_available` | `/analyze` was called before the clause model was trained |
 
 Quote the `request_id` when reporting a problem; the server log records the same ID.
 
