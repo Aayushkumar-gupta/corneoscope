@@ -27,6 +27,15 @@ def error_response(
     headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     request_id = request.state.request_id
+    logger.log(
+        logging.ERROR if status_code >= 500 else logging.WARNING,
+        "request_id=%s status=%s code=%s %s %s",
+        request_id,
+        status_code,
+        code,
+        request.method,
+        request.url.path,
+    )
     error = {"code": code, "message": message, "request_id": request_id}
     if details is not None:
         error["details"] = details

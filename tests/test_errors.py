@@ -69,6 +69,36 @@ def test_unexpected_error_hides_details_and_logs_request_id(client, caplog):
     assert request_id in caplog.text
 
 
+@pytest.mark.parametrize(
+    ("path", "status", "code"),
+    [
+        ("/app-error", 413, "file_too_large"),
+        ("/items/abc", 400, "invalid_request"),
+        ("/missing", 404, "not_found"),
+    ],
+)
+def test_every_client_error_is_logged_with_its_request_id(
+    client, caplog, path, status, code
+):
+    with caplog.at_level(logging.WARNING, logger="corneoscope.api.errors"):
+        response = client.get(path)
+
+    request_id = response.headers[REQUEST_ID_HEADER]
+    assert response.status_code == status
+    [record] = [r for r in caplog.records if request_id in r.getMessage()]
+    assert record.levelno == logging.WARNING
+    assert f"status={status} code={code} GET {path}" in record.getMessage()
+
+
+def test_a_rejected_api_key_is_logged_with_its_request_id(caplog):
+    with caplog.at_level(logging.WARNING, logger="corneoscope.api.errors"):
+        response = TestClient(app).post("/api/v1/analyze")
+
+    assert response.status_code == 401
+    assert response.headers[REQUEST_ID_HEADER] in caplog.text
+    assert "code=unauthorized" in caplog.text
+
+
 def test_unknown_route_returns_not_found():
     response = TestClient(app).get("/does-not-exist")
 
